@@ -29,8 +29,12 @@ $biggest_log_files = Get-ChildItem -path "network_configs"  -Recurse -File -Filt
 Sort-Object -Property Length -Descending | Select-Object -first 5  Name, 
 @{Name = "SizeMB"; Expression = { [math]::Round($_.Length / 1MB, 2) } }
 
-    
-Write-Host $biggest_log_files
+# Get all unique ip adresses from .conf files
+$ips = Get-ChildItem -path "network_configs"  -Recurse -File -Filter "*.conf" |
+Select-String -Pattern "\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}" |
+ForEach-Object { $_.Matches.Value } |
+Sort-Object -Unique 
+
 
 # Create the report
 $report = @"
@@ -66,6 +70,10 @@ $report += $("-" * 40) + "`n"
 foreach ($file in $biggest_log_files) {
     $report += "  {0,-30} {1,3} MB `n" -f $file.Name, $file.SizeMB
 }
+
+$report += "`nUnika IP-adresser som används i .conf filerna: `n"
+$report += $("-" * 40) + "`n"
+$report += ($ips -join "`n") + "`n"
 
 # Export the report to security_audit.txt
 $report | Out-File -FilePath  "security_audit.txt" -Encoding utf8
