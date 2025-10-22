@@ -35,6 +35,37 @@ Select-String -Pattern "\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}" |
 ForEach-Object { $_.Matches.Value } |
 Sort-Object -Unique 
 
+# Create a table to store data for ERROR, FAILD, DENIED
+$log_errors = @()
+
+# Get all log files
+$log_files = Get-ChildItem -path "network_configs"  -Recurse -File -Filter "*.log"
+
+# Get words to search for pattern in log files
+$patterns = "ERROR", "FAILED", "DENIED"
+
+# Count all ERROR, FAILD, DENIED per file
+foreach ($file in $log_files) {
+    $count = 0
+    foreach ($pattern in $patterns) {
+        $count += (Select-String -Path $file.FullName -Pattern $pattern).Count
+    }
+    $log_errors += [PSCustomObject]@{
+        File   = $file.FullName.Split("network_configs")[1]
+        Counts = $count
+    }
+}
+
+# Sort after most counts
+$log_errors = $log_errors | Sort-Object Counts -Descending
+
+# Get all files with .conf and export to config_inventory.csv
+Get-ChildItem -Path "network_configs" -Recurse -File -Filter "*.conf" |
+Select-Object Name,
+@{Name = "Folder"; Expression = { $_.DirectoryName.Split("network_configs")[1] } } |
+Export-Csv -Path "config_inventory.csv" -NoTypeInformation -Encoding UTF8
+
+
 
 # Create the report
 $report = @"
@@ -74,6 +105,13 @@ foreach ($file in $biggest_log_files) {
 $report += "`nUnika IP-adresser som används i .conf filerna: `n"
 $report += $("-" * 40) + "`n"
 $report += ($ips -join "`n") + "`n"
+
+$report += "`nLog-filer som innehåller fel (ERROR, FAILD, DENIED): `n"
+$report += $("-" * 40) + "`n"
+
+foreach ($log in $log_errors) {
+    $report += "  {0,-30} {1,2} st `n" -f $log.File, $log.Counts
+}
 
 # Export the report to security_audit.txt
 $report | Out-File -FilePath  "security_audit.txt" -Encoding utf8
